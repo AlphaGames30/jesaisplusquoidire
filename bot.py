@@ -92,6 +92,10 @@ def connect():
 
     return "Bot et salon connectés !"
 
+@app.route("/health")
+def health():
+    return "OK", 200
+
 # -----------------------
 # Run Flask
 # -----------------------
