@@ -1,117 +1,95 @@
-import json
-import threading
-from flask import Flask, render_template, request
-from flask_socketio import SocketIO
+# bot.py
 import discord
 from discord.ext import commands
-import os
+from flask import Flask, jsonify, request
+import threading
+import time
+import requests
 
-# -----------------------
-# Flask app
-# -----------------------
+# ====================
+# CONFIGURATION
+# ====================
+BOT_TOKEN = "TON_BOT_TOKEN_ICI"  # Remplace par ton token
+PORT = 5000  # Port du serveur Flask
+
+# Stockage simple des salons connectés (en mémoire)
+connected_channels = set()
+
+# ====================
+# FLASK WEB SERVER
+# ====================
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Route Health Check
+@app.route("/")
+def index():
+    return "Bot Global Chat en ligne !"
+
 @app.route("/health")
 def health():
-    return "OK", 200
+    return jsonify({"status": "OK"})
 
-# Thread pour garder le serveur actif
+@app.route("/register_channel", methods=["POST"])
+def register_channel():
+    """
+    Expects JSON: {"channel_id": 1234567890}
+    """
+    data = request.get_json()
+    channel_id = data.get("channel_id")
+    if channel_id:
+        connected_channels.add(int(channel_id))
+        return jsonify({"status": "ok", "registered_channel": channel_id})
+    return jsonify({"status": "error", "message": "channel_id manquant"}), 400
+
+def run_flask():
+    app.run(host="0.0.0.0", port=PORT)
+
+# ====================
+# DISCORD BOT
+# ====================
+intents = discord.Intents.default()
+intents.messages = True
+intents.message_content = True  # Nécessaire pour lire le contenu des messages
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f"Bot connecté en tant que {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return  # Ignore les messages des bots
+
+    if message.channel.id in connected_channels:
+        for channel_id in connected_channels:
+            if channel_id != message.channel.id:  # Ne renvoie pas dans le même salon
+                channel = bot.get_channel(channel_id)
+                if channel:
+                    try:
+                        await channel.send(f"[{message.guild.name} - {message.channel.name}] {message.author}: {message.content}")
+                    except Exception as e:
+                        print(f"Erreur en envoyant le message: {e}")
+    await bot.process_commands(message)
+
+# ====================
+# KEEP ALIVE THREAD
+# ====================
 def keep_alive():
     while True:
         try:
-            requests.get("http://localhost:5000/health")
+            requests.get(f"http://127.0.0.1:{PORT}/health")
         except:
             pass
-        time.sleep(300)  # toutes les 5 minutes
+        time.sleep(300)  # Ping toutes les 5 minutes
 
-threading.Thread(target=keep_alive, daemon=True).start()
-
-# Ici ton code existant pour le
-
-DATA_FILE = "data.json"
-
-# Charge les données persistantes
-if os.path.exists(DATA_FILE):
-    with open(DATA_FILE, "r") as f:
-        connected_channels = json.load(f)
-else:
-    connected_channels = {}  # {token: [channel_id, ...]}
-
-# Tous les bots actifs
-bots = {}
-
-# Sauvegarde des données
-def save_data():
-    with open(DATA_FILE, "w") as f:
-        json.dump(connected_channels, f)
-
-# -----------------------
-# Fonction pour lancer un bot
-# -----------------------
-def start_bot(token):
-    intents = discord.Intents.default()
-    intents.messages = True
-    bot = commands.Bot(command_prefix="!", intents=intents)
-
-    @bot.event
-    async def on_ready():
-        print(f"{bot.user} connecté !")
-
-    @bot.event
-    async def on_message(message):
-        if message.author.bot:
-            return
-        if token not in connected_channels:
-            return
-        if str(message.channel.id) not in connected_channels[token]:
-            return
-
-        # Relay message to all other channels of all bots
-        for tkn, bot_instance in bots.items():
-            for ch_id in connected_channels.get(tkn, []):
-                if tkn == token and ch_id == str(message.channel.id):
-                    continue
-                try:
-                    channel = bot_instance.get_channel(int(ch_id))
-                    if channel:
-                        await channel.send(f"[{message.guild.name}] {message.author}: {message.content}")
-                except Exception as e:
-                    print(f"Erreur en envoyant le message: {e}")
-
-    bots[token] = bot
-    try:
-        bot.run(token)
-    except Exception as e:
-        print(f"Erreur avec le bot {token}: {e}")
-
-# -----------------------
-# Routes Flask
-# -----------------------
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-@app.route("/connect", methods=["POST"])
-def connect():
-    token = request.form.get("token")
-    channel_id = request.form.get("channel_id")
-    if not token or not channel_id:
-        return "Token ou channel manquant", 400
-
-    if token not in connected_channels:
-        connected_channels[token] = []
-        threading.Thread(target=start_bot, args=(token,), daemon=True).start()
-
-    if channel_id not in connected_channels[token]:
-        connected_channels[token].append(channel_id)
-        save_data()
-
-    return "Bot et salon connectés !"
-
-# -----------------------
-# Run Flask
-# -----------------------
+# ====================
+# LANCEMENT
+# ====================
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000)
+    # Lancer Flask dans un thread séparé
+    threading.Thread(target=run_flask).start()
+    # Lancer le thread keep_alive
+    threading.Thread(target=keep_alive).start()
+    # Lancer le bot Discord
+    bot.run(BOT_TOKEN)
