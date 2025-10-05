@@ -1,0 +1,7 @@
+global_chat/
+│
+├─ bot.py
+├─ requirements.txt
+├─ data.json         # Stockage persistant des bots et salons
+└─ templates/
+   └─ index.html
