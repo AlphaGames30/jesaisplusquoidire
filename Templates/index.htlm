@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Global Chat Discord</title>
+</head>
+<body>
+    <h1>Global Chat Discord</h1>
+    <form id="connectForm">
+        <input type="text" id="token" placeholder="Token Discord" required>
+        <input type="text" id="channel_id" placeholder="ID du salon" required>
+        <button type="submit">Connecter salon</button>
+    </form>
+
+    <script>
+        document.getElementById("connectForm").onsubmit = async (e) => {
+            e.preventDefault();
+            const token = document.getElementById("token").value;
+            const channel_id = document.getElementById("channel_id").value;
+
+            const resp = await fetch("/connect", {
+                method: "POST",
+                headers: {"Content-Type": "application/x-www-form-urlencoded"},
+                body: `token=${encodeURIComponent(token)}&channel_id=${encodeURIComponent(channel_id)}`
+            });
+            alert(await resp.text());
+        }
+    </script>
+</body>
+</html>
