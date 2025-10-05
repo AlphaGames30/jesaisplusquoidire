@@ -12,6 +12,24 @@ import os
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+# Route Health Check
+@app.route("/health")
+def health():
+    return "OK", 200
+
+# Thread pour garder le serveur actif
+def keep_alive():
+    while True:
+        try:
+            requests.get("http://localhost:5000/health")
+        except:
+            pass
+        time.sleep(300)  # toutes les 5 minutes
+
+threading.Thread(target=keep_alive, daemon=True).start()
+
+# Ici ton code existant pour le
+
 DATA_FILE = "data.json"
 
 # Charge les données persistantes
@@ -91,10 +109,6 @@ def connect():
         save_data()
 
     return "Bot et salon connectés !"
-
-@app.route("/health")
-def health():
-    return "OK", 200
 
 # -----------------------
 # Run Flask
